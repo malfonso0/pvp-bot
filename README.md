@@ -28,8 +28,8 @@ The bot now runs as a state-driven loop:
     - If tokens are `0`, wait 60 seconds and check again.
     - If tokens are available, click solo matchmaking.
 4. If on match page:
-   - In `--bot-play` mode, enable fast enemy with `#fastEnemyBtn` (if not already on).
-   - Without `--bot-play`, enable autoplay with `#autoPlayBtn` (if not already on).
+   - By default (bot-play mode), enable fast enemy with `#fastEnemyBtn` (if not already on).
+   - With `--autoplay`, enable autoplay with `#autoPlayBtn`
     - Poll match status until it is no longer `in progress`.
 5. After match end:
     - If reward continue button is visible, click it.
@@ -79,16 +79,22 @@ Run headless:
 python pvp_bot.py --headless
 ```
 
-Run active bot play during match progress (default strategy is balanced_skills):
+Run active bot play during match progress (default behavior):
 
 ```bash
-python pvp_bot.py --bot-play
+python pvp_bot.py
+```
+
+Run autoplay mode instead of bot play:
+
+```bash
+python pvp_bot.py --autoplay
 ```
 
 Run bot play with explicit strategy and allowed buttons (Slash is always allowed):
 
 ```bash
-python pvp_bot.py --bot-play --strategy balanced_skills --allowed-buttons "Back Stab" "Power Slash"
+python pvp_bot.py --strategy balanced_skills --allowed-buttons "Back Stab" "Power Slash"
 ```
 
 Strategy notes:
@@ -139,7 +145,7 @@ If the game UI changes, update selectors in `pvp_bot.py`.
 
 ## Future Implementations
 
-- [x] Automated play using skills to help complete new skill achievements (implemented via `--bot-play` and strategy selection).
+- [x] Automated play using skills to help complete new skill achievements (implemented by default with strategy selection).
 - [ ] Party PvP autoplay.
 - [ ] Party PvP automated play.
 

@@ -27,9 +27,9 @@ class PVPAutomation:
         "custom": "_strategy_custom",
     }
 
-    def __init__(self, headless=False, bot_play=False, strategy="balanced_skills", allowed_buttons=None):
+    def __init__(self, headless=False, autoplay=False, strategy="balanced_skills", allowed_buttons=None):
         self.headless = headless
-        self.bot_play_enabled = bot_play
+        self.autoplay = autoplay
         self.strategy = strategy
         self.allowed_buttons = set(allowed_buttons or [])
         self.browser = None
@@ -139,16 +139,16 @@ class PVPAutomation:
 
             # If not above case, then im on match page, check for autoplay button or back button
 
-            autoplay = soup.select_one('#autoPlayBtn')
-            quick_enemy = soup.select_one('#fastEnemyBtn')
+            autoplay_btn = soup.select_one('#autoPlayBtn')
+            quick_enemy_btn = soup.select_one('#fastEnemyBtn')
             status_badge = soup.select_one('#matchStatusBadge')
 
             # here depends if we are in autoplay mode or bot mode, if bot mode, we will not click autoplay, but if autoplay is off, we will click it
-            if self.bot_play_enabled and quick_enemy and not quick_enemy.text.lower().endswith("on"):
+            if not self.autoplay and quick_enemy_btn and not quick_enemy_btn.text.lower().endswith("on"):
                 return 'match_fast_enemy'
 
             # match page always autoplay button, if already on autoplay, skip it
-            if not self.bot_play_enabled and autoplay and not autoplay.text.lower().endswith("on"):
+            if self.autoplay and autoplay_btn and not autoplay_btn.text.lower().endswith("on"):
                 # May need to check autoplay text
                 return 'match_page_autoplay'
 
@@ -278,14 +278,13 @@ class PVPAutomation:
 
     async def match_in_progress(self, max_wait_seconds=600):
         """Wait for match to finish by monitoring matchStatusBadge"""
-        if self.bot_play_enabled:
-            # logger.info(f"Waiting for match to finish with strategy '{self.strategy}'")
-            await self.bot_play()
-            await asyncio.sleep(random.randint(1, 2))
-            return
+        if self.autoplay:
+            logger.info("Waiting for match to finish...")
+            return await asyncio.sleep(random.randint(5,10))
 
-        logger.info("Waiting for match to finish...")
-        await asyncio.sleep(random.randint(5,10))
+        return await self.bot_play()
+
+
 
     async def run_loop(self, max_iterations=None):
         """Main automation loop"""
@@ -496,15 +495,15 @@ async def main():
         help="Run browser in headless mode"
     )
     parser.add_argument(
-        "--bot-play",
+        "--autoplay",
         action="store_true",
-        help="Use bot play logic while match is in progress"
+        help="Use autoplay while match is in progress. By default, bot-play is used"
     )
     parser.add_argument(
         "--strategy",
         default="balanced_skills",
         choices=sorted(PVPAutomation.STRATEGY_HANDLERS.keys()),
-        help="Button selection strategy for --bot-play. balanced_skills tries to use all skills over time (helpful for achievements). custom is a placeholder that currently redirects to balanced_skills"
+        help="Button selection strategy for bot-play mode (default). balanced_skills tries to use all skills over time (helpful for achievements). custom is a placeholder that currently redirects to balanced_skills"
     )
     parser.add_argument(
         "--allowed-buttons",
@@ -520,14 +519,14 @@ async def main():
 
     automation = PVPAutomation(
         headless=args.headless,
-        bot_play=args.bot_play,
+        autoplay=args.autoplay,
         strategy=args.strategy,
         allowed_buttons=allowed_buttons,
     )
 
     logger.info(
-        "Configuration: bot_play=%s strategy=%s allowed_buttons=%s",
-        args.bot_play,
+        "Configuration: autoplay=%s strategy=%s allowed_buttons=%s",
+        args.autoplay,
         args.strategy,
         sorted(allowed_buttons) if allowed_buttons else "ALL (Slash always allowed)",
     )

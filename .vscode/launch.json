@@ -12,8 +12,9 @@
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.env",
             "args": [
-                "--bot-play", "--strategy=balanced_skills",
+                "--strategy=balanced_skills",
                 // "--allowed-buttons=BackStab"
+                // "--autoplay"
             ]
         }
     ]

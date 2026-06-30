@@ -6,7 +6,9 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
-- Added bot-play runtime mode with CLI flags: `--bot-play`, `--strategy`, and `--allowed-buttons`.
+- Changed match-mode CLI behavior to use `--autoplay` for autoplay mode; bot-play is now the default when the flag is not provided.
+- Updated examples and debug launch configuration to reflect the new default bot-play + optional `--autoplay` flow.
+- Added bot-play runtime mode controls with strategy and skill filtering flags: `--strategy` and `--allowed-buttons`.
 - Added skill-selection pipeline for live matches, including skill metadata parsing and allowed-button filtering (with `Slash` always allowed).
 - Added balanced skill strategy tracking/rotation and a `custom` placeholder strategy that currently delegates to balanced behavior.
 - Added match state handling for fast-enemy mode (`#fastEnemyBtn`) and active turn-based attack flow (`#attackBtn`, `button.skillCard`).

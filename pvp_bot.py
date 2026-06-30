@@ -1,4 +1,5 @@
 import asyncio
+import argparse
 import sys
 import os
 import logging
@@ -310,9 +311,15 @@ async def main():
     # Get credentials from ENV (for future login if needed)
     # username = os.getenv("GAME_USERNAME")
     # password = os.getenv("GAME_PASSWORD")
-    headless = sys.argv[1].lower() == 'true' if len(sys.argv) > 1 else False
+    parser = argparse.ArgumentParser(description="Run the PVP automation bot")
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run browser in headless mode"
+    )
+    args = parser.parse_args(sys.argv[1:])
 
-    automation = PVPAutomation(headless=headless)  # Set to True for headless mode
+    automation = PVPAutomation(headless=args.headless)
 
     # Run for max 100 iterations, or indefinitely if None
     await automation.run_loop(max_iterations=None)

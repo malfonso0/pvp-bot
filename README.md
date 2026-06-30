@@ -75,7 +75,7 @@ python pvp_bot.py
 Run headless:
 
 ```bash
-python pvp_bot.py true
+python pvp_bot.py --headless
 ```
 
 ## Selectors Used

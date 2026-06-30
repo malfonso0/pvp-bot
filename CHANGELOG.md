@@ -11,7 +11,7 @@ The format is based on Keep a Changelog.
 ## [2026-06-30]
 
 ### Added
-
+- Switched CLI headless mode input from positional `true` to `--headless` flag.
 - Game-specific documentation for Demonic Scans PvP flow.
 - Selector reference section for current automation targets.
 - Troubleshooting guidance for login, tokens, matchmaking, and match-status detection.

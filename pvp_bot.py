@@ -1,10 +1,10 @@
 import asyncio
 import argparse
+from collections import defaultdict
 import sys
 import os
 import logging
 import random
-from datetime import datetime
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
@@ -21,18 +21,27 @@ RESET = "\033[0m"
 GOLD  = "\033[38;5;220m"
 RED   = "\033[91m"
 class PVPAutomation:
-    def __init__(self, headless=False):
+
+    STRATEGY_HANDLERS = {
+        "balanced_skills": "_strategy_balanced_skills",
+        "custom": "_strategy_custom",
+    }
+
+    def __init__(self, headless=False, bot_play=False, strategy="balanced_skills", allowed_buttons=None):
         self.headless = headless
+        self.bot_play_enabled = bot_play
+        self.strategy = strategy
+        self.allowed_buttons = set(allowed_buttons or [])
         self.browser = None
         self.page = None
         self.dashboard_url = "https://demonicscans.org/game_dash.php"
         self.pvp_url = "https://demonicscans.org/pvp.php"
         self.last_response_status = None
-
         self.next_state_dict = {
             'pvp_page_wait_for_tokens': 'pvp_page_find_match',
             'pvp_page_find_match': 'match_page_autoplay',
             'match_page_autoplay': 'match_in_progress',
+            'match_fast_enemy': 'match_in_progress',
             'match_in_progress': 'match_finished',  # or match_finished based on result
             'match_finished': 'pvp_page'
         }
@@ -41,11 +50,16 @@ class PVPAutomation:
             'pvp_page_wait_for_tokens':self.wait_for_tokens,
             'pvp_page_find_match':self.find_and_click_match,
             'match_page_autoplay':self.click_autoplay,
-            'match_in_progress':self.wait_for_match_finish,
+            'match_fast_enemy':self.click_fastenemy,
+            'match_in_progress':self.match_in_progress,
             'match_finished':self.back_to_pvp
         }
 
-
+        handler_name = self.STRATEGY_HANDLERS.get(self.strategy, self.STRATEGY_HANDLERS["balanced_skills"])
+        self.strategy_handler = getattr(self, handler_name)
+        self.available_buttons=[]
+        self.buttons_info=None
+        
     async def init_browser(self):
         """Initialize Playwright browser"""
         playwright = await async_playwright().start()
@@ -74,9 +88,6 @@ class PVPAutomation:
         await self.page.wait_for_load_state("networkidle")
         await asyncio.sleep(2)
         logger.info("Dashboard loaded, checking if login required...")
-
-        # Check if we're still on login page (adjust selector as needed)
-        html = await self.get_page_html()
 
         # If you need to log in, credentials should come from ENV
         username = os.getenv("GAME_USERNAME")
@@ -128,13 +139,20 @@ class PVPAutomation:
 
             # If not above case, then im on match page, check for autoplay button or back button
 
-            has_autoplay = soup.select_one('#autoPlayBtn')
+            autoplay = soup.select_one('#autoPlayBtn')
+            quick_enemy = soup.select_one('#fastEnemyBtn')
             status_badge = soup.select_one('#matchStatusBadge')
 
+            # here depends if we are in autoplay mode or bot mode, if bot mode, we will not click autoplay, but if autoplay is off, we will click it
+            if self.bot_play_enabled and quick_enemy and not quick_enemy.text.lower().endswith("on"):
+                return 'match_fast_enemy'
+
             # match page always autoplay button, if already on autoplay, skip it
-            if has_autoplay and has_autoplay.text!="Auto Play On":
+            if not self.bot_play_enabled and autoplay and not autoplay.text.lower().endswith("on"):
                 # May need to check autoplay text
                 return 'match_page_autoplay'
+
+            #TODO: probably good to go back to in_progress_loop instead of comming here on every decision
 
             if status_badge:
                 status = status_badge.text.strip().lower()
@@ -231,6 +249,19 @@ class PVPAutomation:
         """Click autoplay button on match page"""
         return await self.safe_click('#autoPlayBtn', max_attempts=3)
 
+    async def click_fastenemy(self):
+        """Click autoplay button on match page"""
+
+        return await self.safe_click('#fastEnemyBtn', max_attempts=3)
+
+    async def get_buttons_info(self):
+        self.available_buttons = await self.get_available_skill_buttons()
+        allowed_buttons = [btn for btn in self.available_buttons if self._button_allowed(await btn.inner_text())]
+        buttons_info = []
+        for btn in allowed_buttons:
+            buttons_info.append(await self._get_button_info(btn))
+        self.buttons_info = buttons_info  # Store for later use in bot_play
+
     async def back_to_pvp(self):
         """Click back button to return to PVP page"""
 
@@ -245,11 +276,16 @@ class PVPAutomation:
         return await self.safe_click('a.back-btn', max_attempts=3)
 
 
-    async def wait_for_match_finish(self, max_wait_seconds=600):
+    async def match_in_progress(self, max_wait_seconds=600):
         """Wait for match to finish by monitoring matchStatusBadge"""
+        if self.bot_play_enabled:
+            # logger.info(f"Waiting for match to finish with strategy '{self.strategy}'")
+            await self.bot_play()
+            await asyncio.sleep(random.randint(1, 2))
+            return
+
         logger.info("Waiting for match to finish...")
-        # Wait before next check
-        await asyncio.sleep(random.randint(5,10))  # Increase wait time gradually
+        await asyncio.sleep(random.randint(5,10))
 
     async def run_loop(self, max_iterations=None):
         """Main automation loop"""
@@ -297,14 +333,156 @@ class PVPAutomation:
         finally:
             await self.close_browser()
 
-    def live_match(self):
+    @staticmethod
+    def _normalize_button_name(value):
+        return " ".join((value or "").strip().lower().split())
+
+    def _button_allowed(self, button_name):
+        if self._normalize_button_name(button_name) == "slash":
+            return True
+        if not self.allowed_buttons:
+            return True
+        normalized_allowed = {self._normalize_button_name(btn) for btn in self.allowed_buttons}
+        return self._normalize_button_name(button_name) in normalized_allowed
+
+    async def _get_button_info(self, btn):
+        text = (await btn.inner_text() or "").strip()
+        skill_name = text.splitlines()[0].strip() if text else ""
+
+        skill_id_raw = await btn.get_attribute('data-skill-id')
+        if skill_id_raw is None:
+            skill_id_raw = await btn.get_attribute('data-skill')
+
+        skill_id = None
+        if skill_id_raw is not None:
+            try:
+                skill_id = int(skill_id_raw)
+            except ValueError:
+                skill_id = skill_id_raw
+
+        cost_raw = await btn.get_attribute('data-cost')
+        resource_cost_raw = await btn.get_attribute('data-resource-cost')
+        requires_full_resource_raw = await btn.get_attribute('data-requires-full-resource')
+
+        cost = int(cost_raw) if cost_raw and cost_raw.isdigit() else 0
+        resource_cost = int(resource_cost_raw) if resource_cost_raw and resource_cost_raw.isdigit() else 0
+        requires_full_resource = requires_full_resource_raw == "1"
+
+        return {
+            "button": btn,
+            "skill_name": skill_name,
+            "skill_id": skill_id,
+            "cost": cost,
+            "resource_cost": resource_cost,
+            "requires_full_resource": requires_full_resource,
+        }
+
+
+    async def _strategy_balanced_skills(self, buttons_info, available_tokens, resource=0):
+        # adds dinamic attrs, for balanced strategy only
+        if not hasattr(self, "_last_used_skill_index"):
+            self._last_used_skill_index = -1
+            self.skills_counter = defaultdict(int)
+
+        #skills goes from 1 to n, 0 is always slash, which is free and always allowed
+
+        btns = buttons_info[1:] if buttons_info else buttons_info # Exclude Slash (index 0)
+        current_index = (self._last_used_skill_index + 1) % len(btns)   
+        #Check cost for current index
+        if btns[current_index]["cost"] >= available_tokens:
+            # if not enough.. use slash which is free
+            logger.info(f"Not enough tokens for '{btns[current_index]['skill_name']}'skill with cost {btns[current_index]['cost']}, using 'Slash' instead")
+            return buttons_info[0]
+
+        # if enough, use the skill and update last used index
+        self._last_used_skill_index = current_index
+        # logger.info(f"Choosing skill '{btns[current_index]['skill_name']}' with cost {btns[current_index]['cost']}")
+        self.skills_counter[btns[current_index]['skill_name']] += 1
+        return btns[current_index]
+
+    async def _strategy_custom(self, buttons_info, available_tokens, resource=0):
+        # Placeholder behavior until custom strategy rules are implemented.
+        logger.info("Strategy 'custom' is a placeholder and currently redirects to 'balanced_skills'")
+        return await self._strategy_balanced_skills(buttons_info, available_tokens, resource)
+
+    async def get_resources(self):
+        """Get current tokens and resource values"""
+        tokens_element = await self.page.query_selector('#myTokens')
+        resource_element = await self.page.query_selector('#myResource')
+
+        available_tokens = 0
+        if tokens_element:
+            try:
+                available_tokens = int((await tokens_element.text_content() or "0").strip())
+            except ValueError:
+                logger.warning("Could not parse token count from #myTokens")
+
+        resource = 0
+        if resource_element:
+            resource_text = (await resource_element.text_content() or "").strip()
+            digits_only = "".join(ch for ch in resource_text if ch.isdigit())
+            if digits_only:
+                resource = int(digits_only)
+
+        return available_tokens, resource
+
+    async def get_turn_side(self):
+        """Get current turn side (player or enemy)"""
+        turn_side_element = await self.page.query_selector('#turnMeta')
+        side,slot= None, None
+        if turn_side_element:
+            text = (await turn_side_element.text_content() or "").strip().lower()
+            side, *rest, slot = text.split(' ')
+        return side, slot
+
+    async def get_available_skill_buttons(self):
+        """Get all available skill buttons on the match page"""
+        skill_buttons = await self.page.query_selector_all('button.skillCard')
+        available_buttons = []
+        for btn in skill_buttons:
+            available_buttons.append(btn)
+        return available_buttons
+
+    async def bot_play(self):
         """This will run live match! pressing the attack button when ready, and waiting for the match to finish"""
-        # Get buttons
-        
-        # Get available tokens
-        
-        # Get 
-        return False
+
+        available_tokens, available_resources = await self.get_resources()
+        turn, side = await self.get_turn_side()
+        attack_btn = await self.page.query_selector('#attackBtn')
+
+        if not self.buttons_info:
+            await self.get_buttons_info()
+
+        if 'allied' in (turn or '').lower() and not await attack_btn.is_enabled():
+            logger.info("Waiting for turn to be 'Allied' and attack button to be enabled...")
+            await asyncio.sleep(1)
+            return False
+
+        if not attack_btn or not await attack_btn.is_enabled():
+            logger.info("Attack button is not enabled, waiting for next turn...")
+            await asyncio.sleep(0.5)
+            return False
+
+        #turn should be 'Allied'
+        logger.info("Attack button is enabled, clicking it...")
+        await self.safe_click('#attackBtn', max_attempts=3)
+        await self.page.wait_for_load_state("domcontentloaded")
+        await asyncio.sleep(0.5)  # Wait a bit for any redirects or page loads
+
+
+
+        selected_button = await self.strategy_handler(self.buttons_info, available_tokens, available_resources)
+
+        if selected_button is None:
+            logger.error("No skill buttons available to click, skipping turn")
+            return False
+
+        # use button data-skill-id or data-skill attribute to click the button
+        await self.safe_click(f"button[data-skill-id='{selected_button['skill_id']}']", max_attempts=3)
+        logger.info(f"Clicked skill button '{selected_button['skill_name']}' with cost {selected_button['cost']} and resource cost {selected_button['resource_cost']}")
+        await self.page.wait_for_load_state("domcontentloaded")
+        await asyncio.sleep(0.5)  # Wait a bit for any redirects or page loads
+        return True
 
 async def main():
     """Main entry point"""
@@ -317,9 +495,42 @@ async def main():
         action="store_true",
         help="Run browser in headless mode"
     )
+    parser.add_argument(
+        "--bot-play",
+        action="store_true",
+        help="Use bot play logic while match is in progress"
+    )
+    parser.add_argument(
+        "--strategy",
+        default="balanced_skills",
+        choices=sorted(PVPAutomation.STRATEGY_HANDLERS.keys()),
+        help="Button selection strategy for --bot-play. balanced_skills tries to use all skills over time (helpful for achievements). custom is a placeholder that currently redirects to balanced_skills"
+    )
+    parser.add_argument(
+        "--allowed-buttons",
+        nargs="*",
+        default=[],
+        help="Allowed skill buttons (space or comma separated). Slash is always allowed"
+    )
     args = parser.parse_args(sys.argv[1:])
 
-    automation = PVPAutomation(headless=args.headless)
+    allowed_buttons = set()
+    for value in args.allowed_buttons:
+        allowed_buttons.update(part.strip() for part in value.split(',') if part.strip())
+
+    automation = PVPAutomation(
+        headless=args.headless,
+        bot_play=args.bot_play,
+        strategy=args.strategy,
+        allowed_buttons=allowed_buttons,
+    )
+
+    logger.info(
+        "Configuration: bot_play=%s strategy=%s allowed_buttons=%s",
+        args.bot_play,
+        args.strategy,
+        sorted(allowed_buttons) if allowed_buttons else "ALL (Slash always allowed)",
+    )
 
     # Run for max 100 iterations, or indefinitely if None
     await automation.run_loop(max_iterations=None)

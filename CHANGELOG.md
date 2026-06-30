@@ -6,7 +6,10 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+- Updated README CLI examples to use `--allowed-buttons`.
+- Clarified match behavior differences between `--bot-play` (fast enemy) and non-bot mode (autoplay).
+- Expanded README selector docs with bot-play selectors (`#fastEnemyBtn`, `#attackBtn`, `button.skillCard`).
+- Marked skill-based automated play achievements support as implemented in roadmap section.
 
 ## [2026-06-30]
 

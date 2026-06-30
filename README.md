@@ -28,7 +28,8 @@ The bot now runs as a state-driven loop:
     - If tokens are `0`, wait 60 seconds and check again.
     - If tokens are available, click solo matchmaking.
 4. If on match page:
-    - Enable autoplay with `#autoPlayBtn` (if not already on).
+   - In `--bot-play` mode, enable fast enemy with `#fastEnemyBtn` (if not already on).
+   - Without `--bot-play`, enable autoplay with `#autoPlayBtn` (if not already on).
     - Poll match status until it is no longer `in progress`.
 5. After match end:
     - If reward continue button is visible, click it.
@@ -78,6 +79,31 @@ Run headless:
 python pvp_bot.py --headless
 ```
 
+Run active bot play during match progress (default strategy is balanced_skills):
+
+```bash
+python pvp_bot.py --bot-play
+```
+
+Run bot play with explicit strategy and allowed buttons (Slash is always allowed):
+
+```bash
+python pvp_bot.py --bot-play --strategy balanced_skills --allowed-buttons "Back Stab" "Power Slash"
+```
+
+Strategy notes:
+
+- `balanced_skills`: Tries to use all available skills over time. Helpful for achievements.
+- `custom`: Placeholder strategy for future rules. Currently redirects to `balanced_skills`.
+
+Allowed buttons notes:
+
+- Accepts space-separated values and comma-separated values.
+- Example equivalent inputs:
+   - `--allowed-buttons "Back Stab" "Power Slash"`
+   - `--allowed-buttons "Back Stab,Power Slash"`
+- `Slash` is always allowed as a fallback.
+
 ## Selectors Used
 
 Current selectors in code:
@@ -86,6 +112,9 @@ Current selectors in code:
 - Solo queue button: `button.js-matchmake[data-ladder="solo"]`
 - Continue active match link: `a:has-text("Continue Solo Match")`
 - Autoplay button: `#autoPlayBtn`
+- Fast enemy button: `#fastEnemyBtn`
+- Attack button (bot play): `#attackBtn`
+- Skill buttons (bot play): `button.skillCard`
 - Match status: `#matchStatusBadge`
 - Reward continue button: `#continueRewardsBtn`
 - Return button: `a.back-btn`
@@ -110,7 +139,7 @@ If the game UI changes, update selectors in `pvp_bot.py`.
 
 ## Future Implementations
 
-- [ ] Automated play using skills to help complete new skill achievements.
+- [x] Automated play using skills to help complete new skill achievements (implemented via `--bot-play` and strategy selection).
 - [ ] Party PvP autoplay.
 - [ ] Party PvP automated play.
 

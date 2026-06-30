@@ -6,6 +6,11 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+- Added bot-play runtime mode with CLI flags: `--bot-play`, `--strategy`, and `--allowed-buttons`.
+- Added skill-selection pipeline for live matches, including skill metadata parsing and allowed-button filtering (with `Slash` always allowed).
+- Added balanced skill strategy tracking/rotation and a `custom` placeholder strategy that currently delegates to balanced behavior.
+- Added match state handling for fast-enemy mode (`#fastEnemyBtn`) and active turn-based attack flow (`#attackBtn`, `button.skillCard`).
+- Added VS Code debug launch defaults for bot-play usage (`envFile` and bot-play args in `.vscode/launch.json`).
 - Updated README CLI examples to use `--allowed-buttons`.
 - Clarified match behavior differences between `--bot-play` (fast enemy) and non-bot mode (autoplay).
 - Expanded README selector docs with bot-play selectors (`#fastEnemyBtn`, `#attackBtn`, `button.skillCard`).

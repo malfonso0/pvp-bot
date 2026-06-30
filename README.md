@@ -108,6 +108,12 @@ If the game UI changes, update selectors in `pvp_bot.py`.
 - Use `headless=False` while tuning selectors so you can watch behavior.
 - This script is intended for personal automation. Use responsibly and at your own risk.
 
+## Future Implementations
+
+- [ ] Automated play using skills to help complete new skill achievements.
+- [ ] Party PvP autoplay.
+- [ ] Party PvP automated play.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for full project history.

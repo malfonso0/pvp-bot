@@ -1,4 +1,3 @@
-
 PVP Automation Script
 Automated PVP farming for online games using Playwright and BeautifulSoup.
 
@@ -16,7 +15,7 @@ $env:GAME_PASSWORD = "your_password"
 If you omit these, the script assumes you're already logged in via an active session/cookies.
 
 Usage
-python pvp_automation.py
+python ==pvp_bot==.py
 The script will:
 
 Open a browser and navigate to the PVP page

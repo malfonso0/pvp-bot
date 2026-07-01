@@ -327,7 +327,7 @@ class PVPAutomation:
                     if next_state == 'pvp_page':
                         break
 
-                logger.info(f"{GREEN}Iteration {iteration} completed{RESET} - Wins: {self.win_loss_counter['wins']}, Losses: {self.win_loss_counter['loss']}")
+                logger.info(f"{GREEN}Iteration {iteration} completed{RESET} - {GOLD}Wins: {self.win_loss_counter['wins']} - {RED} Losses: {self.win_loss_counter['loss']}{RESET}")
 
         except Exception as e:
             logger.error(f"Fatal error: {e}", exc_info=True)

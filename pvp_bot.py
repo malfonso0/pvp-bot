@@ -59,7 +59,8 @@ class PVPAutomation:
         self.strategy_handler = getattr(self, handler_name)
         self.available_buttons=[]
         self.buttons_info=None
-        
+        self.win_loss_counter=defaultdict(int)
+
     async def init_browser(self):
         """Initialize Playwright browser"""
         playwright = await async_playwright().start()
@@ -270,9 +271,11 @@ class PVPAutomation:
         # need to check the visibility of the continue button, if visible, click it first
         if has_continue_btn and await has_continue_btn.is_visible():
             logger.info(f"{GOLD}{'='*20} MATCH WON {'='*20}{RESET}")
+            self.win_loss_counter['wins'] += 1
             await self.safe_click('#continueRewardsBtn', max_attempts=3)
         else:
             logger.info(f"{RED}{'='*20} MATCH LOST {'='*20}{RESET}")
+            self.win_loss_counter['loss'] += 1
         return await self.safe_click('a.back-btn', max_attempts=3)
 
 
@@ -324,7 +327,7 @@ class PVPAutomation:
                     if next_state == 'pvp_page':
                         break
 
-                logger.info(f"{GREEN}Iteration {iteration} completed{RESET}")
+                logger.info(f"{GREEN}Iteration {iteration} completed{RESET} - Wins: {self.win_loss_counter['wins']}, Losses: {self.win_loss_counter['loss']}")
 
         except Exception as e:
             logger.error(f"Fatal error: {e}", exc_info=True)

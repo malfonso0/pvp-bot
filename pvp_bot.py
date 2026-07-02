@@ -8,6 +8,7 @@ import random
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
+from enum import Enum,StrEnum
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -15,11 +16,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BLUE  = "\033[94m"
-GREEN = "\033[92m"
-RESET = "\033[0m"
-GOLD  = "\033[38;5;220m"
-RED   = "\033[91m"
+class ColorEnum(StrEnum):
+    RESET   = "\033[0m"
+
+    BLUE    = "\033[94m"
+    GREEN   = "\033[92m"
+    GOLD    = "\033[38;5;220m"
+    RED     = "\033[91m"
+
+    CYAN    = "\033[96m"
+    MAGENTA = "\033[95m"
+    YELLOW  = "\033[93m"
+    ORANGE  = "\033[38;5;208m"
+    PING    = "\033[38;5;201m"
+    PURPLE  = "\033[38;5;135m"
+    SALMON  = "\033[38;5;209m"
+
+
 class PVPAutomation:
 
     STRATEGY_HANDLERS = {
@@ -60,6 +73,8 @@ class PVPAutomation:
         self.available_buttons=[]
         self.buttons_info=None
         self.win_loss_counter=defaultdict(int)
+        self.skills_counter = defaultdict(int)
+
 
     async def init_browser(self):
         """Initialize Playwright browser"""
@@ -170,14 +185,15 @@ class PVPAutomation:
             logger.error(f"Error determining page state: {e}")
             return 'error_state'
 
-    async def safe_click(self, selector, max_attempts=3):
+    async def safe_click(self, selector, max_attempts=3, verbose=False):
         """Click and reload on 5XX errors"""
         for attempt in range(max_attempts):
             try:
                 self.last_response_status = None
                 await self.page.click(selector)
                 await self.page.wait_for_load_state("domcontentloaded", timeout=10000)
-                logger.info(f"Click successful: {selector}")
+                if verbose:
+                    logger.info(f"Click successful: {selector}")
                 return True
 
             except Exception as e:
@@ -270,14 +286,13 @@ class PVPAutomation:
 
         # need to check the visibility of the continue button, if visible, click it first
         if has_continue_btn and await has_continue_btn.is_visible():
-            logger.info(f"{GOLD}{'='*20} MATCH WON {'='*20}{RESET}")
+            logger.info(f"{ColorEnum.GOLD}{'='*20} MATCH WON {'='*20}{ColorEnum.RESET}")
             self.win_loss_counter['wins'] += 1
             await self.safe_click('#continueRewardsBtn', max_attempts=3)
         else:
-            logger.info(f"{RED}{'='*20} MATCH LOST {'='*20}{RESET}")
+            logger.info(f"{ColorEnum.RED}{'='*20} MATCH LOST {'='*20}{ColorEnum.RESET}")
             self.win_loss_counter['loss'] += 1
         return await self.safe_click('a.back-btn', max_attempts=3)
-
 
     async def match_in_progress(self, max_wait_seconds=600):
         """Wait for match to finish by monitoring matchStatusBadge"""
@@ -287,21 +302,20 @@ class PVPAutomation:
 
         return await self.bot_play()
 
-
-
     async def run_loop(self, max_iterations=None):
         """Main automation loop"""
         iteration = 0
-
+        colors = [member.value for member in ColorEnum if member]
+        colors = colors[5:]  # Skip the first 5 colors (RESET, BLUE, GREEN, GOLD, RED)
         try:
             await self.init_browser()
             await self.login()
 
             while max_iterations is None or iteration < max_iterations:
                 iteration += 1
-                logger.info(f"{BLUE}{'='*50}{RESET}")
-                logger.info(f"{BLUE}Starting iteration {iteration}{RESET}")
-                logger.info(f"{BLUE}{'='*50}{RESET}")
+                logger.info(f"{ColorEnum.BLUE}{'='*50}{ColorEnum.RESET}")
+                logger.info(f"{ColorEnum.BLUE}Starting iteration {iteration}{ColorEnum.RESET}")
+                logger.info(f"{ColorEnum.BLUE}{'='*50}{ColorEnum.RESET}")
 
                 # Determine current state
                 last_state=None
@@ -327,7 +341,14 @@ class PVPAutomation:
                     if next_state == 'pvp_page':
                         break
 
-                logger.info(f"{GREEN}Iteration {iteration} completed{RESET} - {GOLD}Wins: {self.win_loss_counter['wins']} - {RED} Losses: {self.win_loss_counter['loss']}{RESET}")
+                logger.info(f"{ColorEnum.GREEN}{'='*50}{ColorEnum.RESET}")
+                logger.info(f"{ColorEnum.GREEN}Iteration {iteration} completed{ColorEnum.RESET} - {ColorEnum.GOLD}Wins: {self.win_loss_counter['wins']} - {ColorEnum.RED} Losses: {self.win_loss_counter['loss']}{ColorEnum.RESET}")
+
+                # set each skill with its own color for better visibility
+                skill_colors = {skill: colors[i % len(colors)] for i, skill in enumerate(self.skills_counter.keys())}
+                msg = f"{ColorEnum.GREEN}Skills usage: {ColorEnum.RESET}" + ", ".join(f"{skill_colors[skill]}{skill}{ColorEnum.RESET}: {count}" for skill, count in self.skills_counter.items())
+                logger.info(msg)
+                logger.info(f"{ColorEnum.GREEN}{'='*50}{ColorEnum.RESET}")
 
         except Exception as e:
             logger.error(f"Fatal error: {e}", exc_info=True)
@@ -384,16 +405,16 @@ class PVPAutomation:
         # adds dinamic attrs, for balanced strategy only
         if not hasattr(self, "_last_used_skill_index"):
             self._last_used_skill_index = -1
-            self.skills_counter = defaultdict(int)
 
         #skills goes from 1 to n, 0 is always slash, which is free and always allowed
 
         btns = buttons_info[1:] if buttons_info else buttons_info # Exclude Slash (index 0)
         current_index = (self._last_used_skill_index + 1) % len(btns)   
         #Check cost for current index
-        if btns[current_index]["cost"] >= available_tokens:
+        if btns[current_index]["cost"] > available_tokens:
             # if not enough.. use slash which is free
-            logger.info(f"Not enough tokens for '{btns[current_index]['skill_name']}'skill with cost {btns[current_index]['cost']}, using 'Slash' instead")
+            logger.info(f"Not enough tokens for '{btns[current_index]['skill_name']}' (cost {btns[current_index]['cost']})")
+            self.skills_counter[buttons_info['skill_name']] += 1
             return buttons_info[0]
 
         # if enough, use the skill and update last used index
@@ -445,7 +466,7 @@ class PVPAutomation:
             available_buttons.append(btn)
         return available_buttons
 
-    async def bot_play(self):
+    async def bot_play(self, verbose=False):
         """This will run live match! pressing the attack button when ready, and waiting for the match to finish"""
 
         available_tokens, available_resources = await self.get_resources()
@@ -466,13 +487,14 @@ class PVPAutomation:
             return False
 
         #turn should be 'Allied'
-        logger.info("Attack button is enabled, clicking it...")
+        if verbose:
+            logger.info("Attack button is enabled, clicking it...")
         await self.safe_click('#attackBtn', max_attempts=3)
         await self.page.wait_for_load_state("domcontentloaded")
         await asyncio.sleep(0.5)  # Wait a bit for any redirects or page loads
 
 
-
+        logging.info(f"{ColorEnum.GREEN}Available tokens: {available_tokens}, Available resources: {available_resources}{ColorEnum.RESET}")
         selected_button = await self.strategy_handler(self.buttons_info, available_tokens, available_resources)
 
         if selected_button is None:
@@ -481,7 +503,7 @@ class PVPAutomation:
 
         # use button data-skill-id or data-skill attribute to click the button
         await self.safe_click(f"button[data-skill-id='{selected_button['skill_id']}']", max_attempts=3)
-        logger.info(f"Clicked skill button '{selected_button['skill_name']}' with cost {selected_button['cost']} and resource cost {selected_button['resource_cost']}")
+        logger.info(f"Used skill '{selected_button['skill_name']}'")# with cost {selected_button['cost']} and resource cost {selected_button['resource_cost']}
         await self.page.wait_for_load_state("domcontentloaded")
         await asyncio.sleep(0.5)  # Wait a bit for any redirects or page loads
         return True
